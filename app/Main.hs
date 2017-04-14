@@ -5,13 +5,11 @@ module Main where
 import Data.Maybe            (catMaybes)
 import Data.ByteString as B  (ByteString, null, putStr, split)
 import Data.ByteString.Char8 (unpack)
+import System.Environment    (getArgs)
 import System.Process        (createProcess, proc, std_out, StdStream (CreatePipe))
 import System.Exit           (exitFailure)
 import System.IO             (hGetContents, hPutStrLn, stderr)
 import Tailf                 (lineStream)
-
-iptables = "/sbin/iptables"    :: FilePath
-auth_log = "/var/log/auth.log" :: FilePath
 
 reportHead = "Host "
 reportTail = " blacklisted because of abuse"
@@ -23,7 +21,8 @@ offendRules =
 
 main :: IO ()
 main = do
-  lineStream auth_log 0 (10^6) lineProcessor
+  [filename, pos] <- getArgs
+  lineStream filename (read pos) (10^6) lineProcessor
 
 lineProcessor :: Either String ByteString -> IO ()
 lineProcessor (Left err) = do
@@ -53,7 +52,7 @@ banAddr [] = return ()
 banAddr (bytestring:_) = do
   let addr = unpack bytestring
   let args = ["-A", "BLACKLIST", "-s", addr, "-j", "DROP"]
-  createProcess (proc iptables args){ std_out = CreatePipe }
+  createProcess (proc "/sbin/iptables" args){ std_out = CreatePipe }
   putStrLn $ reportHead ++ show addr ++ reportTail
 
 ascend :: [ByteString] -> [ByteString] -> Bool
