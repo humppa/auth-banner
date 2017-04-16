@@ -7,12 +7,11 @@ import Data.ByteString as B  (ByteString, null, putStr, split)
 import Data.ByteString.Char8 (unpack)
 import System.Environment    (getArgs)
 import System.Process        (createProcess, proc, std_out, StdStream (CreatePipe))
-import System.Exit           (exitFailure)
+import System.Exit           (exitFailure, exitSuccess)
 import System.IO             (hGetContents, hPutStrLn, stderr)
-import Tailf                 (lineStream)
 
-reportHead = "Host "
-reportTail = " blacklisted because of abuse"
+import Sqlite                (initDB, seenOrInsert)
+import Tailf                 (lineStream)
 
 offendRules =
   [ (4, ["Invalid", "user", "from"])
@@ -21,13 +20,14 @@ offendRules =
 
 main :: IO ()
 main = do
+  initDB
   [filename, pos] <- getArgs
   lineStream filename (read pos) (10^6) lineProcessor
 
 lineProcessor :: Either String ByteString -> IO ()
 lineProcessor (Left err) = do
   hPutStrLn stderr err
-  exitFailure
+  exitSuccess
 lineProcessor (Right line) = do
   let words = preprocess line
   let addresses = catMaybes $ map (checkForOffence words) offendRules
@@ -52,8 +52,15 @@ banAddr [] = return ()
 banAddr (bytestring:_) = do
   let addr = unpack bytestring
   let args = ["-A", "BLACKLIST", "-s", addr, "-j", "DROP"]
-  createProcess (proc "/sbin/iptables" args){ std_out = CreatePipe }
-  putStrLn $ reportHead ++ show addr ++ reportTail
+  changes <- seenOrInsert addr
+  case changes of
+    0 -> do
+      putStrLn $ "- skip  " ++ addr
+    1 -> do
+      putStrLn $ "* ban   " ++ addr
+      createProcess (proc "/sbin/iptables" args){ std_out = CreatePipe }
+      return ()
+    otherwise -> exitFailure
 
 ascend :: [ByteString] -> [ByteString] -> Bool
 ascend [] _ = True

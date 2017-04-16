@@ -5,7 +5,7 @@ module Tailf (lineStream) where
 import Control.Concurrent      (threadDelay)
 import Control.Exception       (tryJust)
 import Control.Monad           (guard)
-import System.IO               (IOMode (ReadMode), SeekMode (AbsoluteSeek),
+import System.IO               (IOMode(ReadMode), SeekMode(AbsoluteSeek),
                                 hSeek, openFile)
 import System.IO.Error         (isDoesNotExistError)
 import System.Posix.Files      (fileSize, getFileStatus)
@@ -16,15 +16,13 @@ type FilePosition = Integer
 type MicroSeconds = Int
 
 -- |Tail a file, sending complete lines to the passed-in IO function.
--- If the file disappears, lineStream will return, and the function will be
--- called one final time with a Left.
+-- If the file disappears, lineStream will return, and the function will
+-- be called one final time with a Left.
 lineStream
-  :: FilePath
-  -> FilePosition -- ^ Position in the file to start reading at. Very likely
-                  -- you want to pass 0.
-  -> MicroSeconds -- ^ delay between each check of the file in microseconds
-  -> (Either String B.ByteString -> IO ()) -- ^ function to be called with
-                                            -- each new complete line
+  :: FilePath     -- ^ File to be followed.
+  -> FilePosition -- ^ File reading offset (usually 0).
+  -> MicroSeconds -- ^ Polling delay for file reads.
+  -> (Either String B.ByteString -> IO ()) -- ^ Line callback.
   -> IO ()
 lineStream path offset delay callback = go offset
   where
