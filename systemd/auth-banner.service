@@ -3,10 +3,12 @@ Description=Auth-Banner
 After=network.target rsyslog.service
 
 [Service]
+Type=simple
 EnvironmentFile=-/etc/default/auth-banner
-ExecStart=/usr/local/sbin/auth-banner $AUTH_LOG_FILE $OFFSET
+ExecStart=/usr/local/sbin/auth-banner $AUTH_LOG_FILE $PREFIX_TRIM $OFFSET
 KillMode=process
 Restart=on-failure
+StandardOutput=syslog
 
 [Install]
 WantedBy=multi-user.target

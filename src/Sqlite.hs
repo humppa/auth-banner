@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Sqlite (initDB, seenOrInsert) where
+module Sqlite (initDB, existsOrInsert) where
 
 import Database.SQLite.Simple (Only(..), changes, close,
                                execute, execute_, open)
@@ -20,8 +20,8 @@ initDB = do
   execute_ conn sqlCreateTable
   close conn
 
-seenOrInsert :: String -> IO Int
-seenOrInsert addr = do
+existsOrInsert :: String -> IO Int
+existsOrInsert addr = do
   conn <- open sqliteFilePath
   execute conn sqlInsertOrIgnore (Only addr)
   n <- changes conn

@@ -1,70 +1,58 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+{- TODO -
+ - Configuration file
+ - Lift manual optimization
+ - At init, if there are addresses in database:
+ -  Flush BLACKLIST table
+ -  Add addresses from database
+ - Periodically clear old rules from database and tables
+ - DSL for offence rules:
+ -  A name
+ -  Line match rules
+ -  Addr parse rules
+ - Rename
+ -}
+
 module Main where
 
-import Data.Maybe            (catMaybes)
-import Data.ByteString as B  (ByteString, null, putStr, split)
-import Data.ByteString.Char8 (unpack)
+import Data.ByteString       (ByteString)
 import System.Environment    (getArgs)
-import System.Process        (createProcess, proc, std_out, StdStream (CreatePipe))
+import System.Process        (createProcess, proc, std_out, StdStream(CreatePipe))
 import System.Exit           (exitFailure, exitSuccess)
-import System.IO             (hGetContents, hPutStrLn, stderr)
+import System.IO             (hPutStrLn, stderr)
 
-import Sqlite                (initDB, seenOrInsert)
+import Inspect               (findAbusiveAddress)
+import Sqlite                (initDB, existsOrInsert)
 import Tailf                 (lineStream)
-
-offendRules =
-  [ (4, ["Invalid", "user", "from"])
-  , (5, ["Failed", "password", "for", "root", "from"])
-  ]
+import Types                 (Address(..), toString)
 
 main :: IO ()
 main = do
+  putStrLn "Auth-Banner version 2017-04-21"
   initDB
-  [filename, pos] <- getArgs
-  lineStream filename (read pos) (10^6) lineProcessor
+  [filename, cut, pos] <- getArgs
+  lineStream filename (read pos) (10^6) (lineProcessor $ read cut)
 
-lineProcessor :: Either String ByteString -> IO ()
-lineProcessor (Left err) = do
+lineProcessor :: Int -> Either String ByteString -> IO ()
+lineProcessor n (Left err) = do
+  -- err is always nothing but "File does not exist"
   hPutStrLn stderr err
-  exitSuccess
-lineProcessor (Right line) = do
-  let words = preprocess line
-  let addresses = catMaybes $ map (checkForOffence words) offendRules
-  banAddr addresses
-    where
-      cutPrefix = drop 5
-      removeEmpty = filter $ not . B.null
-      splitToWords = split 0x20
-      needle = ["message", "repeated", "times:"]
-      dropRepeats = \x -> if ascend needle x then [] else x
-      preprocess = dropRepeats . cutPrefix . removeEmpty . splitToWords
+  exitFailure
+lineProcessor n (Right line) = do
+  banAddr $ findAbusiveAddress n line
 
-checkForOffence :: [ByteString] -> (Int, [ByteString]) -> Maybe ByteString
-checkForOffence words (i, rule)
-  | ruleMatches = Just $ words !! i
-  | otherwise   = Nothing
-    where
-      ruleMatches = ascend rule words
-
-banAddr :: [ByteString] -> IO ()
-banAddr [] = return ()
-banAddr (bytestring:_) = do
-  let addr = unpack bytestring
+banAddr :: Either String Address -> IO ()
+banAddr (Left _) = return ()
+banAddr (Right a) = do
+  let addr = toString a
   let args = ["-A", "BLACKLIST", "-s", addr, "-j", "DROP"]
-  changes <- seenOrInsert addr
+  changes <- existsOrInsert addr
   case changes of
     0 -> do
-      putStrLn $ "- skip  " ++ addr
+      putStrLn $ "- " ++ addr
     1 -> do
-      putStrLn $ "* ban   " ++ addr
+      putStrLn $ "+ " ++ addr
       createProcess (proc "/sbin/iptables" args){ std_out = CreatePipe }
       return ()
     otherwise -> exitFailure
-
-ascend :: [ByteString] -> [ByteString] -> Bool
-ascend [] _ = True
-ascend _ [] = False
-ascend n@(x:xs) h@(y:ys)
-  | x == y    = ascend xs ys
-  | otherwise = ascend  n ys
