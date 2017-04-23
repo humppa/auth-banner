@@ -20,7 +20,7 @@ import Data.ByteString       (ByteString)
 import System.Environment    (getArgs)
 import System.Process        (createProcess, proc, std_out, StdStream(CreatePipe))
 import System.Exit           (exitFailure, exitSuccess)
-import System.IO             (hPutStrLn, stderr)
+import System.IO             (BufferMode(..), hPutStrLn, hSetBuffering, stderr, stdout)
 
 import Inspect               (findAbusiveAddress)
 import Sqlite                (initDB, existsOrInsert)
@@ -29,7 +29,8 @@ import Types                 (Address(..), toString)
 
 main :: IO ()
 main = do
-  putStrLn "Auth-Banner version 2017-04-21"
+  hSetBuffering stdout LineBuffering
+  putStrLn "Auth-Banner version 2017-04-24"
   initDB
   [filename, cut, pos] <- getArgs
   lineStream filename (read pos) (10^6) (lineProcessor $ read cut)
@@ -50,9 +51,9 @@ banAddr (Right a) = do
   changes <- existsOrInsert addr
   case changes of
     0 -> do
-      putStrLn $ "- " ++ addr
+      putStrLn $ "Address " ++ addr ++ " already banned"
     1 -> do
-      putStrLn $ "+ " ++ addr
+      putStrLn $ "Banning " ++ addr
       createProcess (proc "/sbin/iptables" args){ std_out = CreatePipe }
       return ()
     otherwise -> exitFailure
