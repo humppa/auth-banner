@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Tailf (lineStream) where
+module Tailf (tailf) where
 
 import Control.Concurrent      (threadDelay)
 import Control.Exception       (tryJust)
@@ -16,20 +16,22 @@ type FilePosition = Integer
 type MicroSeconds = Int
 
 -- |Tail a file, sending complete lines to the passed-in IO function.
--- If the file disappears, lineStream will return, and the function will
+-- If the file disappears, tailf will return, and the function will
 -- be called one final time with a Left.
-lineStream
+tailf
   :: FilePath     -- ^ File to be followed.
   -> FilePosition -- ^ File reading offset (usually 0).
   -> MicroSeconds -- ^ Polling delay for file reads.
   -> (Either String B.ByteString -> IO ()) -- ^ Line callback.
   -> IO ()
-lineStream path offset delay callback = go offset
+tailf path offset delay callback = do
+  maybeStat <- tryJust (guard . isDoesNotExistError) $ getFileStatus path
+  go offset
   where
     go offset = do
       threadDelay delay
-      errorOrStat <- tryJust (guard . isDoesNotExistError) $ getFileStatus path
-      case errorOrStat of
+      maybeStat <- tryJust (guard . isDoesNotExistError) $ getFileStatus path
+      case maybeStat of
        Left e -> callback $ Left "File does not exist"
        Right stat -> do
          let newSize = fromIntegral $ fileSize stat :: Integer

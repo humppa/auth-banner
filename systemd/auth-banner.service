@@ -5,7 +5,7 @@ After=network.target rsyslog.service
 [Service]
 Type=simple
 EnvironmentFile=-/etc/default/auth-banner
-ExecStart=/usr/local/sbin/auth-banner $AUTH_LOG_FILE $PREFIX_TRIM $OFFSET
+ExecStart=/usr/local/sbin/auth-banner $AUTH_LOG_FILE $AUTH_OPTS
 KillMode=process
 Restart=on-failure
 StandardOutput=syslog

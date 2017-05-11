@@ -1,5 +1,5 @@
 name:                auth-banner
-version:             0.0.7.1
+version:             0.8.0
 synopsis:            Ban failed authentication attempts
 description:         Auth-Banner follows system authentication log and blocks
                      any IP addresses which are deemed abusive.
@@ -16,10 +16,10 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Inspect
+  exposed-modules:     Config
+                     , Rules
                      , Sqlite
                      , Tailf
-                     , Types
   build-depends:       base >= 4.7 && < 5
                      , attoparsec
                      , bytestring
@@ -34,7 +34,9 @@ executable auth-banner
   build-depends:       base
                      , auth-banner
                      , bytestring
+                     , optparse-applicative
                      , process
+                     , unix
   default-language:    Haskell2010
 
 source-repository head

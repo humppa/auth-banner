@@ -1,14 +1,9 @@
 # Environment configuration for auth-banner
 
-# Path to auth log. Value must be present or auth-banner will
-# fail to start.
+# Path to system authentication log
+#
 AUTH_LOG_FILE=/var/log/auth.log
 
-# Mandatory manual optimization. The value here must be the
-# number of chars to skip on each log line to get over
-# timestamp, hostname and process identification.
-$PREFIX_TRIM=42
-
-# Number of bytes to skip before tailing the log file.
-# Usually 0. Some value must be present.
-OFFSET=0
+# Optional extra options
+#
+$AUTH_OPTS=
