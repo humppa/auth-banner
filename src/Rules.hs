@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Rules (Address(..), findAbusiveAddress, findBoringAddress, toString) where
+module Rules (Address(..), findAbusiveAddress, findNotTooAbusiveAddress, toString) where
 
 import Prelude hiding                   (take)
 import Control.Applicative              ((<|>))
@@ -38,8 +38,8 @@ findAbusiveAddress = parseOnly $ skipHeader *> tryRules
     skipHeader = manyTill anyChar (string "sshd") *> pid *> string ": "
     tryRules = rootBrute <|> invalidUser <|> noIdent <|> preDisconnect
 
-findBoringAddress :: ByteString -> Either String Address
-findBoringAddress = parseOnly $ zeroValues *> skipExcess *> ws *> parseAddress
+findNotTooAbusiveAddress :: ByteString -> Either String Address
+findNotTooAbusiveAddress = parseOnly $ zeroValues *> skipExcess *> ws *> parseAddress
   where
     ws = skipSpace
     star = ws *> char '*'

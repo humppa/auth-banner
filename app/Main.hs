@@ -1,19 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-{- TODO -
+{- TODO
  - Support configuration of match rules
- - Add big-F support to Tailf
  - Rename (e.g. botblock)
  -}
 
 module Main where
 
+import Prelude hiding        (lines)
+import Control.Monad         (forM_)
 import Data.ByteString       (ByteString, hGetContents)
 import Data.ByteString.Char8 (lines)
 import Data.Either           (rights)
 import Data.Semigroup        ((<>))
 import Options.Applicative   -- *
-import Prelude hiding        (lines)
 import System.Exit           (exitFailure, exitSuccess)
 import System.IO             (BufferMode(..), hPutStrLn, hSetBuffering, stderr, stdout)
 import System.Posix.Process  (getProcessID)
@@ -21,7 +21,7 @@ import System.Posix.Signals  (Handler(..), installHandler, sigHUP)
 import System.Process        (createProcess, proc, std_out, StdStream(CreatePipe))
 
 import Config
-import Rules                 (Address(..), findAbusiveAddress, findBoringAddress, toString)
+import Rules                 (Address(..), findAbusiveAddress, findNotTooAbusiveAddress, toString)
 import Sqlite                (initDatabase, existsOrInsert, blindDelete)
 import Tailf                 (tailf)
 
@@ -39,7 +39,7 @@ main = execParser magic >>= authbanner
       fullDesc <> progDesc descText <> header (headerText Nothing)
 
 authbanner :: Args -> IO ()
-authbanner (Args filename pos) = do
+authbanner (Args filename offset) = do
   pid <- show <$> getProcessID
   hSetBuffering stdout LineBuffering
   putStrLn $ headerText (Just pid)
@@ -49,23 +49,17 @@ authbanner (Args filename pos) = do
   putStrLn "Installing SIGHUP handler"
   installHandler sigHUP pruneTable Nothing
   putStrLn "Following log file"
-  tailf filename pos (10^6) lineProcessor
-
-lineProcessor :: Either String ByteString -> IO ()
-lineProcessor (Left err) = do
-  hPutStrLn stderr err
-  exitFailure
-lineProcessor (Right line) = do
-  banOrElse $ findAbusiveAddress line
+  tailf filename offset pollDelay (banOrElse . findAbusiveAddress)
 
 pruneTable :: Handler
 pruneTable = Catch $ do
   let args = ["-L", "BLACKLIST", "-n", "-v"]
   (_, Just h, _, _) <- createProcess (proc ipCmd args){ std_out = CreatePipe }
   output <- hGetContents h
-  let addresses = rights $ map findBoringAddress (lines output)  -- :: [Address]
-  mapM_ (liftBan . toString) addresses
-  mapM_ (blindDelete . toString) addresses
+  let addresses = rights $ map findNotTooAbusiveAddress (lines output)  -- :: [Address]
+  forM_ (toString <$> addresses) $ \addr -> do
+    blindDelete addr
+    liftBan addr
 
 banOrElse :: Either String Address -> IO ()
 banOrElse (Left _) = return ()

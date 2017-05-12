@@ -2,47 +2,49 @@
 
 module Tailf (tailf) where
 
-import Control.Concurrent      (threadDelay)
-import Control.Exception       (tryJust)
-import Control.Monad           (guard)
-import System.IO               (IOMode(ReadMode), SeekMode(AbsoluteSeek),
-                                hSeek, openFile)
-import System.IO.Error         (isDoesNotExistError)
-import System.Posix.Files      (fileSize, getFileStatus)
+import Prelude hiding        (init)
+import Control.Concurrent    (threadDelay)
+import Control.Exception     (tryJust)
+import Control.Monad         (guard)
+import Data.ByteString       (ByteString, hGetSome, splitWith)
+import Data.Monoid           ((<>))
+import System.IO             (IOMode(ReadMode), SeekMode(AbsoluteSeek),
+                              hClose, hSeek, hTell, withFile)
+import System.IO.Error       (isDoesNotExistError)
+import System.Linux.Inotify  (Inotify, Event(..), Mask(..),
+                              addWatch, getEvent, init,
+                              in_DELETE_SELF, in_MODIFY, in_MOVE_SELF)
 
-import qualified Data.ByteString as B
+type MSec = Int
+type FileOffset = Integer
 
-type FilePosition = Integer
-type MicroSeconds = Int
-
--- |Tail a file, sending complete lines to the passed-in IO function.
--- If the file disappears, tailf will return, and the function will
--- be called one final time with a Left.
-tailf
-  :: FilePath     -- ^ File to be followed.
-  -> FilePosition -- ^ File reading offset (usually 0).
-  -> MicroSeconds -- ^ Polling delay for file reads.
-  -> (Either String B.ByteString -> IO ()) -- ^ Line callback.
-  -> IO ()
+tailf :: FilePath -> FileOffset -> MSec -> (ByteString -> IO ()) -> IO ()
 tailf path offset delay callback = do
-  maybeStat <- tryJust (guard . isDoesNotExistError) $ getFileStatus path
-  go offset
-  where
-    go offset = do
+  inotify <- init
+  watch <- tryJust (guard . isDoesNotExistError) $
+    addWatch inotify path (in_MODIFY <> in_MOVE_SELF <> in_DELETE_SELF)
+  case watch of
+    (Left  _) -> do
       threadDelay delay
-      maybeStat <- tryJust (guard . isDoesNotExistError) $ getFileStatus path
-      case maybeStat of
-       Left e -> callback $ Left "File does not exist"
-       Right stat -> do
-         let newSize = fromIntegral $ fileSize stat :: Integer
-         if newSize > offset
-         then do
-           handle <- openFile path ReadMode
-           hSeek handle AbsoluteSeek offset
-           newContents <- B.hGetContents handle
-           let lines = B.splitWith (== 0x0A) newContents
-           let startNext = newSize - (toInteger $ B.length $ last lines)
-           mapM_ (callback . Right) $ init lines
-           go startNext
-         else do
-           go offset
+      tailf path 0 delay callback
+    (Right _) -> do
+      eventReader inotify path offset callback
+      tailf path offset delay callback
+
+eventReader :: Inotify -> FilePath -> Integer -> (ByteString -> IO ()) -> IO ()
+eventReader inotify path offset callback = do
+  event <- getEvent inotify
+  case event of
+    (Event _ (Mask 2) _ _) -> do
+      n <- readf path offset callback
+      eventReader inotify path n callback
+    _ -> return ()
+
+readf :: FilePath -> Integer -> (ByteString -> IO ()) -> IO Integer
+readf path offset callback = withFile path ReadMode $ \handle -> do
+  hSeek handle AbsoluteSeek offset
+  content <- hGetSome handle (2^30)
+  newOffset <- hTell handle
+  mapM_ callback $ splitWith (== 0x0A) content
+  hClose handle
+  return newOffset

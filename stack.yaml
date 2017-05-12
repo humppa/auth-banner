@@ -5,7 +5,8 @@ resolver: lts-8.9
 packages:
 - '.'
 
-extra-deps: []
+extra-deps:
+- 'linux-inotify-0.3.0.1'
 
 flags: {}
 
