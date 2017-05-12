@@ -4,7 +4,7 @@ module Config where
 
 import Data.Maybe
 
-version = "0.9.0"
+version = "0.9.1"
 
 -- ipCmd = "/bin/echo"
 -- sqliteFilePath = "/home/tuomas/auth-banner.sqlite"

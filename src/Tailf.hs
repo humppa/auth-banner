@@ -18,6 +18,8 @@ import System.Linux.Inotify  (Inotify, Event(..), Mask(..),
 type MSec = Int
 type FileOffset = Integer
 
+maxReadSize = 2^27 :: Int
+
 tailf :: FilePath -> FileOffset -> MSec -> (ByteString -> IO ()) -> IO ()
 tailf path offset delay callback = do
   inotify <- init
@@ -43,7 +45,7 @@ eventReader inotify path offset callback = do
 readf :: FilePath -> Integer -> (ByteString -> IO ()) -> IO Integer
 readf path offset callback = withFile path ReadMode $ \handle -> do
   hSeek handle AbsoluteSeek offset
-  content <- hGetSome handle (2^30)
+  content <- hGetSome handle maxReadSize
   newOffset <- hTell handle
   mapM_ callback $ splitWith (== 0x0A) content
   hClose handle
