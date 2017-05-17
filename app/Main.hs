@@ -2,6 +2,7 @@
 
 {- TODO
  - Support configuration of match rules
+ - Configuration for iptables stuff
  - Rename (e.g. botblock)
  -}
 
@@ -13,14 +14,14 @@ import Data.ByteString       (ByteString, hGetContents)
 import Data.ByteString.Char8 (lines)
 import Data.Either           (rights)
 import Data.Semigroup        ((<>))
-import Options.Applicative   -- *
+import Options.Applicative --(*)
 import System.Exit           (exitFailure, exitSuccess)
 import System.IO             (BufferMode(..), hPutStrLn, hSetBuffering, stderr, stdout)
 import System.Posix.Process  (getProcessID)
 import System.Posix.Signals  (Handler(..), installHandler, sigHUP)
 import System.Process        (createProcess, proc, std_out, StdStream(CreatePipe))
 
-import Config
+import Config                (copyText, descText, headerText, ipCmd, offsetHelp)
 import Rules                 (Address(..), findAbusiveAddress, findNotTooAbusiveAddress, toString)
 import Sqlite                (initDatabase, existsOrInsert, blindDelete)
 import Tailf                 (tailf)
@@ -49,7 +50,7 @@ authbanner (Args filename offset) = do
   putStrLn "Installing SIGHUP handler"
   installHandler sigHUP pruneTable Nothing
   putStrLn "Following log file"
-  tailf filename offset pollDelay (banOrElse . findAbusiveAddress)
+  tailf filename offset (banOrElse . findAbusiveAddress)
 
 pruneTable :: Handler
 pruneTable = Catch $ do

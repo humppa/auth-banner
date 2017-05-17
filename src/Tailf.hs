@@ -3,6 +3,7 @@
 module Tailf (tailf) where
 
 import Prelude hiding        (init)
+import Config                (maxReadSize, pollDelay)
 import Control.Concurrent    (threadDelay)
 import Control.Exception     (tryJust)
 import Control.Monad         (guard)
@@ -15,23 +16,18 @@ import System.Linux.Inotify  (Inotify, Event(..), Mask(..),
                               addWatch, getEvent, init,
                               in_DELETE_SELF, in_MODIFY, in_MOVE_SELF)
 
-type MSec = Int
-type FileOffset = Integer
-
-maxReadSize = 2^27 :: Int
-
-tailf :: FilePath -> FileOffset -> MSec -> (ByteString -> IO ()) -> IO ()
-tailf path offset delay callback = do
+tailf :: FilePath -> Integer -> (ByteString -> IO ()) -> IO ()
+tailf path offset callback = do
   inotify <- init
   watch <- tryJust (guard . isDoesNotExistError) $
     addWatch inotify path (in_MODIFY <> in_MOVE_SELF <> in_DELETE_SELF)
   case watch of
     (Left  _) -> do
-      threadDelay delay
-      tailf path 0 delay callback
+      threadDelay pollDelay
+      tailf path 0 callback
     (Right _) -> do
       eventReader inotify path offset callback
-      tailf path offset delay callback
+      tailf path offset callback
 
 eventReader :: Inotify -> FilePath -> Integer -> (ByteString -> IO ()) -> IO ()
 eventReader inotify path offset callback = do
@@ -40,7 +36,9 @@ eventReader inotify path offset callback = do
     (Event _ (Mask 2) _ _) -> do
       n <- readf path offset callback
       eventReader inotify path n callback
-    _ -> return ()
+    _ -> do
+      putStrLn "File moved or deleted; reinitializing inotify"
+      return ()
 
 readf :: FilePath -> Integer -> (ByteString -> IO ()) -> IO Integer
 readf path offset callback = withFile path ReadMode $ \handle -> do
