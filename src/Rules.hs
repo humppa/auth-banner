@@ -21,22 +21,28 @@ parseAddress = do
   c <- decimal
   char '.'
   d <- decimal
-  return $ Address a b c d
+  case all (\n -> 0 <= n && n <= 255) [a, b, c, d] of
+    True  -> return $ Address a b c d
+    False -> fail "Invalid address"
 
 toString :: Address -> String
 toString (Address a b c d) = intercalate "." $ map show [a, b, c, d]
 
+skipTo = \s -> manyTill anyChar (string s)
+
 rootBrute     = string "Failed password for root from " *> parseAddress
-invalidUser   = string "Invalid user " *> manyTill anyChar (string "from ") *> parseAddress
+invalidUser   = string "Invalid user " *> skipTo "from " *> parseAddress
 noIdent       = string "Did not receive identification string from " *> parseAddress
-preDisconnect = string "Received disconnect from " *> parseAddress <* manyTill anyChar (string "preauth")
+preDisconnect = string "Received disconnect from " *> parseAddress <* skipTo "preauth"
+maxAttempts   = string "error: maximum authentication attempts exceeded for "
+                *> skipTo " from " *> parseAddress
 
 findAbusiveAddress :: ByteString -> Either String Address
 findAbusiveAddress = parseOnly $ skipHeader *> tryRules
   where
     pid = char '[' *> decimal *> char ']'
-    skipHeader = manyTill anyChar (string "sshd") *> pid *> string ": "
-    tryRules = rootBrute <|> invalidUser <|> noIdent <|> preDisconnect
+    skipHeader = skipTo "sshd" *> pid *> string ": "
+    tryRules = rootBrute <|> invalidUser <|> noIdent <|> preDisconnect <|> maxAttempts
 
 findNotTooAbusiveAddress :: ByteString -> Either String Address
 findNotTooAbusiveAddress = parseOnly $ zeroValues *> skipExcess *> ws *> parseAddress
